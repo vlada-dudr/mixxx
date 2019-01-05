@@ -3,7 +3,7 @@
 
 #include <QDialog>
 
-#include "library/ui_dlgcoverartfullsize.h"
+#include "ui_dlgcoverartfullsize.h"
 #include "library/coverart.h"
 #include "mixer/basetrackplayer.h"
 #include "track/track.h"

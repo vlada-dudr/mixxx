@@ -23,7 +23,7 @@
 #include <QRect>
 #include <QStringList>
 
-#include "preferences/dialog/ui_dlgpreferencesdlg.h"
+#include "ui_dlgpreferencesdlg.h"
 #include "preferences/usersettings.h"
 #include "control/controlpushbutton.h"
 #include "preferences/dlgpreferencepage.h"
