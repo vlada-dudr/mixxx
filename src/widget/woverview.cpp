@@ -57,8 +57,7 @@ WOverview::WOverview(
         m_scaleFactor(1.0) {
     m_endOfTrackControl = new ControlProxy(
             m_group, "end_of_track", this);
-    m_endOfTrackControl->connectValueChanged(
-             SLOT(onEndOfTrackChange(double)));
+    m_endOfTrackControl->connectValueChanged(this, &WOverview::onEndOfTrackChange);
     m_trackSamplesControl =
             new ControlProxy(m_group, "track_samples", this);
     m_playControl = new ControlProxy(m_group, "play", this);
@@ -96,28 +95,27 @@ void WOverview::setup(const QDomNode& node, const SkinContext& context) {
     for (const auto& pMark: m_marks) {
         if (pMark->isValid()) {
             pMark->connectSamplePositionChanged(this,
-                    SLOT(onMarkChanged(double)));
+                    &WOverview::onMarkChanged);
         }
     }
 
     QDomNode child = node.firstChild();
     while (!child.isNull()) {
         if (child.nodeName() == "MarkRange") {
-            m_markRanges.push_back(WaveformMarkRange());
+            m_markRanges.push_back(WaveformMarkRange(m_group, child, context, m_signalColors));
             WaveformMarkRange& markRange = m_markRanges.back();
-            markRange.setup(m_group, child, context, m_signalColors);
 
             if (markRange.m_markEnabledControl) {
                 markRange.m_markEnabledControl->connectValueChanged(
-                        this, SLOT(onMarkRangeChange(double)));
+                        this, &WOverview::onMarkRangeChange);
             }
             if (markRange.m_markStartPointControl) {
                 markRange.m_markStartPointControl->connectValueChanged(
-                        this, SLOT(onMarkRangeChange(double)));
+                        this, &WOverview::onMarkRangeChange);
             }
             if (markRange.m_markEndPointControl) {
                 markRange.m_markEndPointControl->connectValueChanged(
-                        this, SLOT(onMarkRangeChange(double)));
+                        this, &WOverview::onMarkRangeChange);
             }
         }
         child = child.nextSibling();
@@ -228,6 +226,7 @@ void WOverview::slotLoadingTrack(TrackPointer pNewTrack, TrackPointer pOldTrack)
 
         connect(pNewTrack.get(), SIGNAL(waveformSummaryUpdated()),
                 this, SLOT(slotWaveformSummaryUpdated()));
+        slotWaveformSummaryUpdated();
     } else {
         m_pCurrentTrack.reset();
         m_pWaveform.clear();
