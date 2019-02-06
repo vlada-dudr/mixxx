@@ -25,7 +25,6 @@ tests = files([
     'soundsourceproviderregistrytest.cpp',
     'synccontroltest.cpp',
     'tableview_test.cpp',
-    'trackexport_test.h',
     'tracknumberstest.cpp',
     'wpushbutton_test.cpp',
     'analyserwaveformtest.cpp',
@@ -79,16 +78,15 @@ tests = files([
 
 test_prep = qt5.preprocess(
     moc_headers: [ 
-        'src/test/trackexport_test.h'
+        'trackexport_test.h'
 ]
 )
 
 tst = executable('tst',
     dependencies : [qt5dep, dependency('benchmark'), dependencies],
     sources: [tests, protos, test_prep],
-    include_directories: include_directories(includes),
+    include_directories: includes,
     link_with: libmixxx,
     install: false)
 
 test('t1', tst)
-endif

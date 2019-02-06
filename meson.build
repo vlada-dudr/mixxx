@@ -5,43 +5,81 @@ project('mixxx','cpp',
 
 #soundtouch_sub = subproject('soundtouch')
 
-# fidlib... Maybe move it to subproject?
-add_languages('c')
 
+cdata = configuration_data()
 git = find_program('git')
-git_run = run_command(git,'rev-parse', '--short', 'HEAD')
+git_run = run_command(git,'log', '--pretty=oneline', '--first-parent')
 if git_run.returncode() == 0
-    git_revision = git_run.stdout()
+    git_revision = git_run.stdout().split('\n').length()
+      cdata.set('BUILD_REV', git_revision)
 else
     git_revision = ''
 endif
 
+git_run = run_command(git,'rev-pase', '--abbrev-ref', 'HEAD')
+if git_run.returncode() == 0
+    git_branch = git_run.stdout().split('\n').get(0).strip()
+    if not git_revision.startswith('release')
+      cdata.set('BUILD_BRANCH', git_branch)
+    endif
+else
+    git_branch = ''
+endif
 
+if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimized'
+    add_project_arguments( '-DMIXXX_BUILD_DEBUG', language: 'cpp')
+elif get_option('buildtype') == 'release'
+    add_project_arguments( '-DMIXXX_BUILD_RELEASE', '-DNDEBUG', language: 'cpp')
 
+    if host_machine.system() == 'windows'
+        add_project_arguments('-DQ_ASSERT(x)=qt_noop()', language: 'cpp')
+    else
+        add_project_arguments('-DQ_ASSERT(x)=static_cast<void>(false&&(x))', language: 'cpp')
+    endif
+endif
+
+if get_option('buildtype') == 'release' or get_option('buildtype') == 'debugoptimized'
+    add_project_arguments(['-ffast-math', '-funroll-loops'], language: 'cpp')
+endif
+
+add_project_arguments(
+    '-DSETTINGS_PATH=".mixxx"',
+    '-DSETTINGS_FILE="mixxx.cfg"',
+    #'-D__SNDFILE__',
+    #'-DSFC_SUPPORTS_SET_COMPRESSION_LEVEL',
+    #'-Dkiss_fft_scalar=double',
+    language: 'cpp')
+
+fidlib_sub = subproject('fidlib')
+qm_sub = subproject('qm-dsp') # Queen Mary beattracker
+
+cpp = meson.get_compiler('cpp')
 dependencies = [
     dependency('portaudio-2.0'),
-    meson.get_compiler('cpp').find_library('porttime'),
-    meson.get_compiler('cpp').find_library('portmidi'),
-    meson.get_compiler('cpp').find_library('m', required: false),
-    meson.get_compiler('cpp').find_library('rt', required: false),
-    meson.get_compiler('cpp').find_library('libmp3lame'),
+    cpp.find_library('porttime'),
+    cpp.find_library('portmidi'),
+    cpp.find_library('m', required: false),
+    cpp.find_library('rt', required: false),
+    cpp.find_library('libmp3lame'),
+    #dependency('libmp3lame', fallback: ['lame', 'lame_dep']),
     dependency('sndfile'),
     dependency('flac'),
-    dependency('vorbisfile'),
-    dependency('vorbis'),
-    dependency('vorbisenc'),
-    dependency('ogg'),
+    dependency('ogg',       fallback: ['ogg',    'ogg_dep']),
+    dependency('vorbisfile',fallback: ['vorbis', 'vorbisfile_dep']),
+    dependency('vorbis',    fallback: ['vorbis', 'vorbis_dep']),
+    dependency('vorbisenc', fallback: ['vorbis', 'vorbisenc_dep']),
     #dependency('gl'),
     #dependency('glu'),
     dependency('taglib'),
-    dependency('protobuf-lite'),
+    dependency('protobuf-lite', fallback: ['protobuf', 'protobuf_lite_dep']),
     dependency('libchromaprint'),
     dependency('rubberband'),
-    dependency('soundtouch'),
+    dependency('soundtouch', fallback: ['soundtouch', 'soundtouch_dep']),
     dependency('threads'),
-    # meson build extra
-    dependency('gtest'),
-    dependency('gmock')
+    qm_sub.get_variable('qm_dep'), # Queen Mary beattracker
+    fidlib_sub.get_variable('fidlib_dep'),
+    dependency('gtest', fallback: ['gtest', 'gtest_dep']),
+    dependency('gmock', fallback: ['gtest', 'gmock_dep'])
 ]
 
 if host_machine.system() == 'darwin'
@@ -92,24 +130,27 @@ elif host_machine.system() == 'linux'
         language: 'cpp'
     )
     dependencies += dependency('x11')
+    qt5modules += 'X11Extras'
+endif
 
-elif host_machine.system() == 'darwin'
+
+includes = [include_directories([
+    'src',
+    'lib/qtscript-bytearray',
+    'lib/portaudio',
+    'lib/replaygain',
+    'lib/reverb'
+])]
+
+if host_machine.system() == 'darwin'
     # homebrew etc...
     includes += include_directories('/usr/local/lib')
 endif
 
-
-includes = [
-    'src',
-    'lib/qtscript-bytearray',
-    'lib/portaudio',
-    'lib/fidlib',
-    'lib/replaygain',
-    'lib/reverb'
-]
-
 mixxx_headers =    [
-    'src/analyzer/analyzerqueue.h',
+    'src/analyzer/analyzerthread.h',
+    'src/analyzer/trackanalysisscheduler.h',
+
     'src/control/control.h',
     'src/control/controlaudiotaperpot.h',
     'src/control/controleffectknob.h',
@@ -397,6 +438,7 @@ mixxx_headers =    [
     'src/widget/wnumberrate.h',
     'src/widget/wslidercomposed.h',
     'src/widget/wwidgetstack.h',
+    'src/util/workerthread.h',
 
     # QtScript Bytearray
     'lib/qtscript-bytearray/bytearrayclass.h',
@@ -428,12 +470,14 @@ mixxx_sources =    [
 
     'src/preferences/configobject.cpp',
     'src/preferences/dialog/dlgprefautodj.cpp',
-    'src/preferences/dialog/dlgprefdeck.cpp',
+    'src/preferences/dialog/dlgprefbeats.cpp',
     'src/preferences/dialog/dlgprefcrossfader.cpp',
+    'src/preferences/dialog/dlgprefdeck.cpp',
     'src/preferences/dialog/dlgprefeffects.cpp',
     'src/preferences/dialog/dlgprefeq.cpp',
     'src/preferences/dialog/dlgpreferences.cpp',
     'src/preferences/dialog/dlgprefinterface.cpp',
+    'src/preferences/dialog/dlgprefkey.cpp',
     'src/preferences/dialog/dlgpreflibrary.cpp',
     'src/preferences/dialog/dlgprefrecord.cpp',
     'src/preferences/dialog/dlgprefreplaygain.cpp',
@@ -544,9 +588,15 @@ mixxx_sources =    [
     'src/engine/cachingreaderchunk.cpp',
     'src/engine/cachingreaderworker.cpp',
 
-    'src/analyzer/analyzerqueue.cpp',
     'src/analyzer/analyzerwaveform.cpp',
     'src/analyzer/analyzergain.cpp',
+    'src/analyzer/plugins/analyzerqueenmarybeats.cpp',
+    'src/analyzer/plugins/analyzerqueenmarykey.cpp',
+    'src/analyzer/plugins/analyzersoundtouchbeats.cpp',
+    'src/analyzer/analyzerkey.cpp',
+    'src/analyzer/analyzerthread.cpp',
+    'src/analyzer/analyzerbeats.cpp',
+    'src/analyzer/trackanalysisscheduler.cpp',
     'src/analyzer/analyzerebur128.cpp',
 
     'src/controllers/controller.cpp',
@@ -924,6 +974,7 @@ mixxx_sources =    [
     'src/util/indexrange.cpp',
     'src/util/desktophelper.cpp',
     'src/util/widgetrendertimer.cpp',
+    'src/util/workerthread.cpp',
 
     #portmidi
     'src/controllers/midi/portmidienumerator.cpp',
@@ -948,7 +999,6 @@ mixxx_sources =    [
     'src/sources/soundsourcesndfile.cpp',
 
     ## LIBS
-    'lib/fidlib/fidlib.c',
     'lib/replaygain/replaygain.cpp',
     'lib/reverb/Reverb.cc',
     'lib/portaudio/pa_ringbuffer.c',
@@ -1069,10 +1119,10 @@ if get_option('vinylcontrol').enabled()
 
     add_project_arguments('-D__VINYLCONTROL__', language: 'cpp')
 
-    includes += [
+    includes += include_directories([
         'lib/xwax',
         'src'
-    ]
+    ])
 
     mixxx_ui += 'src/preferences/dialog/dlgprefvinyldlg.ui'
 
@@ -1110,28 +1160,6 @@ else
     mixxx_ui += 'src/preferences/dialog/dlgprefnovinyldlg.ui'
     mixxx_sources += 'src/preferences/dialog/dlgprefnovinyl.cpp'
     mixxx_headers += 'src/preferences/dialog/dlgprefnovinyl.h'
-endif
-
-if get_option('vamp').enabled()
-    add_project_arguments('-D__VAMP__', language: 'cpp')
-
-    dependencies += [
-        dependency('vamp-hostsdk'),
-        dependency('fftw3'), # really? i guess it is necessary only when we self build vamp
-        meson.get_compiler('cpp').find_library('dl')
-    ]
-
-    ### seems it is not used anywhere
-    #add_project_arguments('-DHAVE_FFTW3', language: 'cpp')
-
-    mixxx_sources += [
-        'src/analyzer/vamp/vampanalyzer.cpp',
-        'src/analyzer/vamp/vamppluginadapter.cpp',
-        'src/analyzer/analyzerbeats.cpp',
-        'src/analyzer/analyzerkey.cpp',
-        'src/preferences/dialog/dlgprefbeats.cpp',
-        'src/preferences/dialog/dlgprefkey.cpp'
-    ]
 endif
 
 if get_option('modplug').enabled()
@@ -1254,47 +1282,20 @@ if get_option('localecompare').enabled()
     endif
     add_project_arguments('-D__SQLITE3__', language: 'cpp')
     dependencies += [
-        dependency('sqlite3')
+        dependency('sqlite3', fallback: [ 'sqlite', 'sqlite_dep' ])
     ]
 endif
 
+#@TODO
 #if get_option('qt_sqlite_plugin').enabled()
     #qt5modules += 'Sql'
 #endif
 
+#@TODO
 #if meson.get_compiler('cpp').get_define('-ffast-math')
     mixxx_sources += 'src/util/fpclassify.cpp'
 #endif
 
-if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimized'
-    add_project_arguments( '-DMIXXX_BUILD_DEBUG', language: 'cpp')
-elif get_option('buildtype') == 'release'
-    add_project_arguments( '-DMIXXX_BUILD_RELEASE', '-DNDEBUG', language: 'cpp')
-
-    if host_machine.system() == 'windows'
-        add_project_arguments('-DQ_ASSERT(x)=qt_noop()', language: 'cpp')
-    else
-        add_project_arguments('-DQ_ASSERT(x)=static_cast<void>(false&&(x))', language: 'cpp')
-    endif
-endif
-
-if get_option('buildtype') == 'release' or get_option('buildtype') == 'debugoptimized'
-    add_project_arguments(['-ffast-math', '-funroll-loops'], language: 'cpp')
-endif
-
-add_project_arguments(
-    '-DSETTINGS_PATH=".mixxx"',
-    '-DSETTINGS_FILE="mixxx.cfg"',
-    #'-D__SNDFILE__',
-    #'-DSFC_SUPPORTS_SET_COMPRESSION_LEVEL',
-    #'-Dkiss_fft_scalar=double',
-    language: 'cpp')
-
-add_project_arguments(
-    # fidlib... but making it proper subproject is good idea I think
-    '-DT_LINUX',
-    language: 'c'
-)
 
 protobuf_files = [
     'src/proto/beats.proto',
@@ -1321,7 +1322,7 @@ qt5dep = dependency('qt5', modules : qt5modules)
 prep = qt5.preprocess(
     moc_headers : mixxx_headers,
     ui_files : mixxx_ui,
-    include_directories: include_directories(includes)
+    include_directories: includes
 )
 
 qrc = qt5.preprocess(
@@ -1332,7 +1333,7 @@ libmixxx = static_library(
     'mixxx',
     sources : [mixxx_sources, prep, protos ],
     dependencies : [qt5dep, dependencies ],
-    include_directories: include_directories(includes),
+    include_directories: includes,
     install : false
 )
 
@@ -1340,7 +1341,7 @@ mixxx = executable(
     'mixxx',
     dependencies : [dependency('gl'), qt5dep],
     sources : ['src/main.cpp', qrc, protos],
-    include_directories: include_directories(includes),
+    include_directories: includes,
     link_with : [ libmixxx],
     install : true
 )
@@ -1351,3 +1352,4 @@ install_subdir('res/fonts',        install_dir : join_paths(get_option('datadir'
 install_subdir('res/keyboard',     install_dir : join_paths(get_option('datadir'),meson.project_name()), strip_directory : false)
 install_subdir('res/translations', install_dir : join_paths(get_option('datadir'),meson.project_name()), strip_directory : false)
 
+subdir('src/test')
