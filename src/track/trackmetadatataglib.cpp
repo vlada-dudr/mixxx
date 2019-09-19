@@ -38,6 +38,25 @@ namespace {
 
 Logger kLogger("TagLib");
 
+// Only ID3v2.3 and ID3v2.4 are supported for both importing and
+// exporting text frames. ID3v2.2 uses different frame identifiers,
+// i.e. only 3 instead of 4 characters.
+// https://en.wikipedia.org/wiki/ID3#ID3v2
+// http://id3.org/Developer%20Information
+const unsigned int kMinID3v2Version = 3;
+
+bool checkID3v2HeaderVersionSupported(const TagLib::ID3v2::Header& header) {
+    if (header.majorVersion() < kMinID3v2Version) {
+        kLogger.warning().noquote()
+                << QString("ID3v2.%1 is only partially supported - please convert your file tags to at least ID3v2.%2").arg(
+                        QString::number(header.majorVersion()),
+                        QString::number(kMinID3v2Version));
+        return false;
+    } else {
+        return true;
+    }
+}
+
 } // anonymous namespace
 
 namespace taglib {
@@ -1113,6 +1132,14 @@ void importTrackMetadataFromID3v2Tag(
         return; // nothing to do
     }
 
+    const TagLib::ID3v2::Header* pHeader = tag.header();
+    DEBUG_ASSERT(pHeader);
+    if (!checkID3v2HeaderVersionSupported(*pHeader)) {
+        kLogger.warning() << "Legacy ID3v2 version - importing only basic tags";
+        importTrackMetadataFromTag(pTrackMetadata, tag);
+        return; // done
+    }
+
     // Omit to read comments with the default implementation provided by
     // TagLib. We are only interested in a CommentsFrame with an empty
     // description (see below). If no such CommentsFrame exists TagLib
@@ -1208,22 +1235,42 @@ void importTrackMetadataFromID3v2Tag(
         double bpmValue = pTrackMetadata->getTrackInfo().getBpm().getValue();
         // Some software use (or used) to write decimated values without comma,
         // so the number reads as 1352 or 14525 when it is 135.2 or 145.25
-        double bpmValueOriginal = bpmValue;
-        while (bpmValue > Bpm::kValueMax) {
-            bpmValue /= 10.0;
-        }
-        if (bpmValue != bpmValueOriginal) {
+        if (bpmValue < Bpm::kValueMin || bpmValue > 1000 * Bpm::kValueMax) {
+            // Considered out of range, don't try to adjust it
             kLogger.warning()
-                    << " Changing BPM on"
-                    << pTrackMetadata->getTrackInfo().getArtist()
-                    << "-"
-                    << pTrackMetadata->getTrackInfo().getTitle()
-                    << "from"
-                    << bpmValueOriginal
-                    << "to"
+                    << "Ignoring invalid bpm value"
                     << bpmValue;
+            bpmValue = Bpm::kValueUndefined;
+        } else {
+            double bpmValueOriginal = bpmValue;
+            DEBUG_ASSERT(Bpm::kValueUndefined <= Bpm::kValueMax);
+            bool adjusted = false;
+            while (bpmValue > Bpm::kValueMax) {
+                double bpmValueAdjusted = bpmValue / 10;
+                if (bpmValueAdjusted < bpmValue) {
+                    bpmValue = bpmValueAdjusted;
+                    adjusted = true;
+                    continue;
+                }
+                // Ensure that the loop always terminates even for invalid
+                // values like Inf and NaN!
+                kLogger.warning()
+                        << "Ignoring invalid bpm value"
+                        << bpmValueOriginal;
+                bpmValue = Bpm::kValueUndefined;
+                break;
+            }
+            if (adjusted) {
+                kLogger.info()
+                        << "Adjusted bpm value from"
+                        << bpmValueOriginal
+                        << "to"
+                        << bpmValue;
+            }
         }
-        pTrackMetadata->refTrackInfo().setBpm(Bpm(bpmValue));
+        if (bpmValue != Bpm::kValueUndefined) {
+            pTrackMetadata->refTrackInfo().setBpm(Bpm(bpmValue));
+        }
     }
 
     const TagLib::ID3v2::FrameList keyFrame(tag.frameListMap()["TKEY"]);
@@ -1474,7 +1521,7 @@ void importTrackMetadataFromVorbisCommentTag(
     // https://picard.musicbrainz.org/docs/mappings
     //
     // We are not relying on  TagLib (1.11.1) with a somehow inconsistent
-    // handling. It prefers "DECSCRIPTION" for reading, but adds a "COMMENT"
+    // handling. It prefers "DESCRIPTION" for reading, but adds a "COMMENT"
     // field upon writing when no "DESCRIPTION" field exists.
     QString comment;
     if (!readXiphCommentField(tag, "COMMENT", &comment) || comment.isEmpty()) {
@@ -1817,9 +1864,11 @@ bool exportTrackMetadataIntoID3v2Tag(TagLib::ID3v2::Tag* pTag,
     }
 
     const TagLib::ID3v2::Header* pHeader = pTag->header();
-    if (!pHeader || (3 > pHeader->majorVersion())) {
-        // only ID3v2.3.x and higher (currently only ID3v2.4.x) are supported
-        return false;
+    DEBUG_ASSERT(pHeader);
+    if (!checkID3v2HeaderVersionSupported(*pHeader)) {
+        kLogger.warning() << "Legacy ID3v2 version - exporting only basic tags";
+        exportTrackMetadataIntoTag(pTag, trackMetadata, WRITE_TAG_OMIT_NONE);
+        return true; // done
     }
 
     // NOTE(uklotzde): Setting the comment for ID3v2 tags does
