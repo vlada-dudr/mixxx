@@ -6,11 +6,10 @@ if host_machine.system() != 'windows'
   add_project_arguments([ '-DUSE-PTHREADS' ], language: 'cpp')
 endif
 
-sources = [
+sources = files([
   #'base/KaiserWindow.cpp',
   'base/Pitch.cpp',
   #'base/SincWindow.cpp',
-  'dsp/chromagram/CQprecalc.cpp',
   'dsp/chromagram/Chromagram.cpp',
   'dsp/chromagram/ConstantQ.cpp',
   'dsp/keydetection/GetKeyMode.cpp',
@@ -39,7 +38,7 @@ sources = [
   'dsp/transforms/FFT.cpp',
   #'dsp/wavelet/Wavelet.cpp',
   'ext/kissfft/kiss_fft.c',
-  'ext/kissfft/kiss_fftr.c',
+  'ext/kissfft/tools/kiss_fftr.c',
   #'hmm/hmm.c',
   'maths/Correlation.cpp',
   #'maths/CosineDistance.cpp',
@@ -47,7 +46,7 @@ sources = [
   'maths/MathUtilities.cpp',
   #'maths/pca/pca.c',
   #'thread/Thread.cpp'
-]
+])
 
 qm_lib = static_library(
   'qm',

@@ -1,0 +1,59 @@
+mixxx_sources += files([ 
+    'audiosignal.cpp',
+    'autohidpi.cpp',
+    'cmdlineargs.cpp',
+    'console.cpp',
+    'desktophelper.cpp',
+    'dnd.cpp',
+    'duration.cpp',
+    'experiment.cpp',
+    'file.cpp',
+    'fpclassify.cpp',
+    'indexrange.cpp',
+    'logger.cpp',
+    'logging.cpp',
+    'mac.cpp',
+    'movinginterquartilemean.cpp',
+    'performancetimer.cpp',
+    'readaheadsamplebuffer.cpp',
+    'rlimit.cpp',
+    'rotary.cpp',
+    'samplebuffer.cpp',
+    'sample.cpp',
+    'sandbox.cpp',
+    'screensaver.cpp',
+    'sleepableqthread.cpp',
+    'stat.cpp',
+    'statmodel.cpp',
+    'statsmanager.cpp',
+    'tapfilter.cpp',
+    'task.cpp',
+    'threadcputimer.cpp',
+    'time.cpp',
+    'timer.cpp',
+    'valuetransformer.cpp',
+    'version.cpp',
+    'widgethider.cpp',
+    'widgetrendertimer.cpp',
+    'workerthread.cpp',
+    'workerthreadscheduler.cpp',
+    'xml.cpp',
+])
+
+mixxx_headers += files([ 
+    'sleepableqthread.h',
+    'statmodel.h',
+    'statsmanager.h',
+    'tapfilter.h',
+    'task.h',
+    'timer.h',
+    'widgethider.h',
+    'widgetrendertimer.h',
+    'workerthread.h',
+])
+
+mixxx_ui += files([ 
+])
+subdir('battery')
+subdir('color')
+subdir('db')

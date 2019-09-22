@@ -1,0 +1,17 @@
+if get_option('hid').enabled()
+    add_project_arguments('-D__HID__', language: 'cpp')
+
+    # @TODO: fallback to internal
+    dependencies += dependency('hidapi-libusb')
+    dependencies += dependency('libusb-1.0')
+    mixxx_sources += [ 
+      'hidcontroller.cpp',
+      'hidcontrollerpresetfilehandler.cpp',
+      'hidenumerator.cpp'
+    ]
+
+    mixxx_headers += [ 
+      'hidcontroller.h'
+    ]
+endif
+
