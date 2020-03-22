@@ -73,7 +73,8 @@ tests = files([
     'enginemastertest.cpp',
     'enginemicrophonetest.cpp',
     'readaheadmanager_test.cpp',
-    'signalpathtest.h'
+    'signalpathtest.h',
+    'mpscfifotest.cpp'
 ])
 
 test_prep = qt5.preprocess(
